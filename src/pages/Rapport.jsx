@@ -484,4 +484,58 @@ export default function ThiqaRapport() {
 
         {/* CONTACT */}
         <div className="thiqa-fade-in" style={{
-          background: "#fff", border: "1.5px so
+          background: "#fff", border: "1.5px solid #e5e7eb",
+          borderRadius: 18, padding: "20px",
+          marginBottom: 16,
+        }}>
+          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 17, color: "#111827", marginBottom: 6 }}>
+            Contacter le vendeur
+          </div>
+          <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, fontFamily: "'DM Sans', sans-serif" }}>
+            Le numéro est masqué pour protéger la vie privée du vendeur.
+          </div>
+          {!contactRevealed ? (
+            <button className="contact-btn" onClick={() => setContactRevealed(true)}>
+              🔓 Afficher le numéro du vendeur
+            </button>
+          ) : (
+            <div style={{
+              padding: "14px 18px", background: "#f0fdf4",
+              border: "1.5px solid #bbf7d0", borderRadius: 12,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 20, color: "#15803d" }}>
+                +213 6XX XXX XXX
+              </span>
+              <a
+                href="https://wa.me/213600000000"
+                style={{
+                  padding: "8px 14px", background: "#25d366",
+                  color: "#fff", borderRadius: 8, fontSize: 12,
+                  fontWeight: 700, textDecoration: "none",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                WhatsApp
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* FOOTER */}
+        <div className="thiqa-fade-in" style={{
+          fontSize: 11.5, color: "#9ca3af", textAlign: "center",
+          fontFamily: "'DM Sans', sans-serif", lineHeight: 1.7, padding: "0 10px",
+        }}>
+          <div style={{ marginBottom: 6, fontWeight: 600, color: "#6b7280" }}>
+            Rapport #{d.id} · thiqa-auto.dz
+          </div>
+          Thiqa Auto est un avis technique indépendant. Ce rapport ne remplace pas un essai routier
+          personnel ni une garantie légale. Thiqa Auto décline toute responsabilité quant aux
+          informations non vérifiables, notamment le kilométrage déclaré.
+        </div>
+
+      </div>
+    </div>
+  );
+}
