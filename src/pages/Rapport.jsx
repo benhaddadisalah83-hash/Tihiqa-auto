@@ -218,7 +218,7 @@ export default function ThiqaRapport() {
           ) : (
             <div style={{ padding: "14px 18px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontFamily: "Georgia, serif", fontSize: 18, color: "#15803d" }}>+213 6XX XXX XXX</span>
-              <a href="https://wa.me/213542465055" style={{ padding: "8px 14px", background: "#25d366", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>WhatsApp</a>
+              <a href="https://wa.me/213600000000" style={{ padding: "8px 14px", background: "#25d366", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>WhatsApp</a>
             </div>
           )}
         </div>
