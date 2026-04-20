@@ -209,7 +209,7 @@ function RDVsScreen({ rdvs, agents, onRefresh }) {
                 <div style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>{r.date} {r.time} · {r.formule} · {fmt(r.price)}</div>
               </div>
               <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: cfg.bg + "33", padding: "3px 10px", borderRadius: 20, fontFamily: "sans-serif" }}>{cfg.label}</span>
-              <div style={{ display: "flex", gap: 6" }}>
+              <div style={{ display: "flex", gap: 6 }}>
                 {r.status === "pending" && (
                   <button onClick={() => updateStatus(r.id, "confirmed")} style={{ padding: "5px 10px", background: "#052e16", border: "none", borderRadius: 6, color: "#10b981", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Confirmer</button>
                 )}
