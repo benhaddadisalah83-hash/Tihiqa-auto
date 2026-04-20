@@ -1,234 +1,406 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-const STATUS_CFG = {
-  certified:          { label: "Certifie",             color: "#16a34a", bg: "#f0fdf4", accent: "#bbf7d0", dot: "#22c55e" },
-  certified_reserves: { label: "Certifie avec reserves", color: "#b45309", bg: "#fffbeb", accent: "#fde68a", dot: "#f59e0b" },
-  non_compliant:      { label: "Non conforme",          color: "#dc2626", bg: "#fef2f2", accent: "#fecaca", dot: "#ef4444" },
+function fmt(n) { return (n || 0).toLocaleString() + " DZD"; }
+
+const RDV_CFG = {
+  confirmed: { label: "Confirme",   color: "#10b981", bg: "#f0fdf4" },
+  pending:   { label: "En attente", color: "#f59e0b", bg: "#fffbeb" },
+  cancelled: { label: "Annule",     color: "#6b7280", bg: "#f9fafb" },
+  done:      { label: "Termine",    color: "#3b82f6", bg: "#eff6ff" },
 };
 
-const POINT_STATUS = {
-  ok:       { label: "OK",          color: "#16a34a", bg: "#f0fdf4" },
-  warning:  { label: "A surveiller", color: "#b45309", bg: "#fffbeb" },
-  critical: { label: "Critique",    color: "#dc2626", bg: "#fef2f2" },
+const RPT_CFG = {
+  certified:          { label: "Certifie",      color: "#10b981", dot: "#22c55e" },
+  certified_reserves: { label: "Avec reserves", color: "#f59e0b", dot: "#fbbf24" },
+  non_compliant:      { label: "Non conforme",  color: "#ef4444", dot: "#f87171" },
 };
 
-const CAT_STATUS = {
-  ok:       { icon: "✓", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
-  warning:  { icon: "!", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  critical: { icon: "✕", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
-};
-
-function ScoreGauge({ score }) {
-  const color = score >= 80 ? "#16a34a" : score >= 55 ? "#f59e0b" : "#ef4444";
-  const r = 52;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
+function Sidebar({ active, setActive, badge }) {
+  const nav = [
+    { id: "dashboard", label: "Vue ensemble", icon: "◼" },
+    { id: "rdvs",      label: "RDV",          icon: "📅", badge },
+    { id: "rapports",  label: "Rapports",      icon: "📄" },
+    { id: "agents",    label: "Agents",        icon: "👤" },
+    { id: "finances",  label: "Finances",      icon: "💰" },
+  ];
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <svg width="120" height="120" viewBox="0 0 130 130">
-        <circle cx="65" cy="65" r={r} fill="none" stroke="#e5e7eb" strokeWidth="10" />
-        <circle cx="65" cy="65" r={r} fill="none" stroke={color} strokeWidth="10"
-          strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4} strokeLinecap="round" />
-        <text x="65" y="60" textAnchor="middle" fontSize="28" fontWeight="800" fill={color} fontFamily="Georgia, serif">{score}</text>
-        <text x="65" y="78" textAnchor="middle" fontSize="11" fill="#6b7280">/100</text>
-      </svg>
-      <span style={{ fontSize: 11, color: "#6b7280", letterSpacing: "0.06em", textTransform: "uppercase" }}>Score Thiqa</span>
+    <div style={{ width: 200, flexShrink: 0, background: "#0f172a", borderRight: "1px solid #1e293b", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "18px 16px", borderBottom: "1px solid #1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🔍</div>
+        <span style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 800 }}>Thiqa Admin</span>
+      </div>
+      <nav style={{ flex: 1, padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        {nav.map(item => (
+          <button key={item.id} onClick={() => setActive(item.id)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: active === item.id ? "#1e293b" : "transparent", display: "flex", alignItems: "center", gap: 10, textAlign: "left" }}>
+            <span style={{ fontSize: 14, opacity: active === item.id ? 1 : 0.5 }}>{item.icon}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: active === item.id ? 700 : 400, color: active === item.id ? "#f1f5f9" : "#64748b" }}>{item.label}</span>
+            {item.badge > 0 && <span style={{ background: "#1e40af", color: "#93c5fd", fontSize: 10, fontWeight: 800, padding: "1px 6px", borderRadius: 20 }}>{item.badge}</span>}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
 
-export default function ThiqaRapport() {
-  const { id } = useParams();
-  const [rapport, setRapport] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [expanded, setExpanded] = useState(null);
-  const [contactRevealed, setContactRevealed] = useState(false);
+function Card({ label, value, sub, icon }) {
+  return (
+    <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: "16px 18px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
+        <span>{icon}</span>
+      </div>
+      <div style={{ fontSize: 24, color: "#f1f5f9", fontWeight: 800 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const fetch = async () => {
-      if (!id) { setNotFound(true); setLoading(false); return; }
-      const { data, error } = await supabase.from("rapports").select("*").eq("id", id).single();
-      if (error || !data) { setNotFound(true); } else { setRapport(data); }
-      setLoading(false);
-    };
-    fetch();
-  }, [id]);
+function Dashboard({ rapports, rdvs, agents }) {
+  const ca = rapports.filter(r => r.paid).reduce((a, r) => a + (r.price || 0), 0);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ fontSize: 20, color: "#f1f5f9", fontWeight: 800 }}>Vue ensemble</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+        <Card label="CA encaisse"    value={fmt(ca)}                sub="Cash confirme"  icon="💰" />
+        <Card label="Rapports"       value={rapports.length}        sub="Generes"         icon="📄" />
+        <Card label="RDV en attente" value={rdvs.filter(r => r.status === "pending").length} sub="A confirmer" icon="📅" />
+        <Card label="Agents actifs"  value={agents.filter(a => a.status === "active").length} sub={"sur " + agents.length} icon="👤" />
+      </div>
+      <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: "16px 18px" }}>
+        <div style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Derniers rapports</div>
+        {rapports.length === 0 && <div style={{ fontSize: 13, color: "#475569" }}>Aucun rapport pour le moment.</div>}
+        {rapports.slice(0, 6).map(r => {
+          const cfg = RPT_CFG[r.status] || RPT_CFG.certified;
+          return (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", background: "#0a1628", borderRadius: 7, marginBottom: 6 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: cfg.dot, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600 }}>{r.brand} {r.model} {r.year}</div>
+                <div style={{ fontSize: 10, color: "#475569" }}>{r.id} - {r.wilaya}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color }}>{r.score}/100</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: r.paid ? "#10b981" : "#ef4444" }}>{r.paid ? "Paye" : "Impaye"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ fontSize: 16, color: "#6b7280", fontFamily: "sans-serif" }}>Chargement du rapport...</div>
+function RDVs({ rdvs, agents, refresh }) {
+  const [filter, setFilter] = useState("all");
+  const [show, setShow] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ client_name: "", client_phone: "", vehicle: "", wilaya: "", agent_id: "", date: "", time: "", formule: "Premium", price: "7900", notes: "", status: "pending" });
+
+  const list = filter === "all" ? rdvs : rdvs.filter(r => r.status === "pending");
+
+  const F = (label, field, ph, type) => (
+    <div key={field}>
+      <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <input type={type || "text"} placeholder={ph} value={form[field]} onChange={e => setForm(v => ({ ...v, [field]: e.target.value }))}
+        style={{ width: "100%", padding: "9px 11px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 7, color: "#f1f5f9", fontSize: 13, outline: "none" }} />
     </div>
   );
 
-  if (notFound) return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-      <div style={{ fontSize: 40 }}>🔍</div>
-      <div style={{ fontSize: 20, color: "#111827", fontWeight: 700, fontFamily: "Georgia, serif" }}>Rapport introuvable</div>
-      <div style={{ fontSize: 14, color: "#6b7280", fontFamily: "sans-serif" }}>Le rapport {id} n existe pas ou a expire.</div>
-    </div>
-  );
+  const save = async () => {
+    if (!form.client_name || !form.vehicle || !form.date) return alert("Nom, vehicule et date requis");
+    setSaving(true);
+    const { error } = await supabase.from("rdvs").insert([{ ...form, id: "RDV-" + Date.now(), price: Number(form.price) }]);
+    setSaving(false);
+    if (!error) { setShow(false); setForm({ client_name: "", client_phone: "", vehicle: "", wilaya: "", agent_id: "", date: "", time: "", formule: "Premium", price: "7900", notes: "", status: "pending" }); refresh(); }
+    else alert("Erreur: " + error.message);
+  };
 
-  const d = rapport;
-  const cfg = STATUS_CFG[d.status] || STATUS_CFG.certified;
-  const checklist = d.checklist || [];
-
-  const categories = [
-    { id: "carrosserie", label: "Carrosserie", icon: "🚗" },
-    { id: "mecanique",   label: "Mecanique",   icon: "⚙️" },
-    { id: "securite",    label: "Securite",    icon: "🛡️" },
-    { id: "interieur",   label: "Interieur",   icon: "💺" },
-    { id: "essai",       label: "Essai",       icon: "🛣️" },
-    { id: "documents",   label: "Documents",   icon: "📄" },
-  ].map(cat => {
-    const points = checklist.filter(p => p.category === cat.id);
-    const hasCritical = points.some(p => p.status === "critical");
-    const hasWarning  = points.some(p => p.status === "warning");
-    return { ...cat, points, status: hasCritical ? "critical" : hasWarning ? "warning" : "ok" };
-  });
+  const update = async (id, status) => {
+    await supabase.from("rdvs").update({ status }).eq("id", id);
+    refresh();
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } .fade { animation: fadeUp 0.4s ease both; } @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 20, color: "#f1f5f9", fontWeight: 800 }}>RDV</div>
+          <div style={{ fontSize: 11, color: "#475569" }}>{rdvs.length} rendez-vous</div>
+        </div>
+        <button onClick={() => setShow(!show)} style={{ padding: "8px 16px", background: "#1e40af", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          {show ? "Fermer" : "+ Nouveau RDV"}
+        </button>
+      </div>
 
-      {/* HEADER */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 1px 8px #0000000d" }}>
-        <div style={{ maxWidth: 680, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "#111827", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🔍</div>
+      {show && (
+        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: "18px" }}>
+          <div style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 700, marginBottom: 14 }}>Nouveau RDV</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {F("Nom client",  "client_name",  "M. Rahmani")}
+            {F("Telephone",   "client_phone", "+213 6...")}
+            {F("Vehicule",    "vehicle",      "Mercedes 2016")}
+            {F("Wilaya",      "wilaya",       "Alger")}
+            {F("Date",        "date",         "", "date")}
+            {F("Heure",       "time",         "", "time")}
+            {F("Prix DZD",    "price",        "7900", "number")}
             <div>
-              <div style={{ fontFamily: "Georgia, serif", fontSize: 18, color: "#111827" }}>Thiqa Auto</div>
-              <div style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.1em", textTransform: "uppercase" }}>Inspection certifiee</div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>Formule</div>
+              <select value={form.formule} onChange={e => setForm(v => ({ ...v, formule: e.target.value }))} style={{ width: "100%", padding: "9px 11px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 7, color: "#f1f5f9", fontSize: 13 }}>
+                <option>Essentiel</option><option>Premium</option><option>Pro</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>Agent</div>
+              <select value={form.agent_id} onChange={e => setForm(v => ({ ...v, agent_id: e.target.value }))} style={{ width: "100%", padding: "9px 11px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 7, color: "#f1f5f9", fontSize: 13 }}>
+                <option value="">-- Choisir --</option>
+                {agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.wilaya})</option>)}
+              </select>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "right" }}>
-            <div style={{ fontWeight: 600, color: "#374151" }}>{d.id}</div>
-            <div>{d.created_at ? new Date(d.created_at).toLocaleDateString("fr-DZ") : ""}</div>
-          </div>
+          <button onClick={save} disabled={saving} style={{ marginTop: 12, padding: "10px 22px", background: saving ? "#334155" : "#1e40af", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            {saving ? "Enregistrement..." : "Enregistrer"}
+          </button>
         </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6 }}>
+        {["all","pending","confirmed","cancelled","done"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: filter === f ? "#1e40af" : "#1e293b", color: filter === f ? "#fff" : "#64748b", fontSize: 11, fontWeight: 700 }}>
+            {f === "all" ? "Tous" : f === "pending" ? "En attente" : f === "confirmed" ? "Confirmes" : f === "cancelled" ? "Annules" : "Termines"}
+          </button>
+        ))}
       </div>
 
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "20px 16px 60px" }}>
-
-        {/* HERO */}
-        <div className="fade" style={{ background: cfg.bg, border: `1.5px solid ${cfg.accent}`, borderRadius: 20, padding: "24px 20px", display: "flex", alignItems: "center", gap: 20, marginBottom: 16 }}>
-          <ScoreGauge score={d.score || 0} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: `1.5px solid ${cfg.accent}`, borderRadius: 30, padding: "5px 14px 5px 8px", marginBottom: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.dot }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{cfg.label}</span>
-            </div>
-            <div style={{ fontFamily: "Georgia, serif", fontSize: 22, color: "#111827", lineHeight: 1.2 }}>{d.brand} {d.model}</div>
-            <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>{d.year} · {d.energy} · {d.color}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>Wilaya : {d.wilaya}</div>
-          </div>
-        </div>
-
-        {/* KILOMETRAGE */}
-        <div className="fade" style={{ background: "#fffbeb", border: "1.5px solid #fde68a", borderRadius: 14, padding: "14px 18px", display: "flex", gap: 12, marginBottom: 16 }}>
-          <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#92400e", marginBottom: 2 }}>Kilometrage non certifie</div>
-            <div style={{ fontSize: 13, color: "#78350f" }}>Valeur declaree : <strong>{d.mileage_declared || "Non renseigne"}</strong>. Thiqa Auto ne certifie pas le kilometrage.</div>
-          </div>
-        </div>
-
-        {/* CATEGORIES GRID */}
-        <div className="fade" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
-          {categories.map(cat => {
-            const st = CAT_STATUS[cat.status];
-            return (
-              <button key={cat.id} onClick={() => setExpanded(expanded === cat.id ? null : cat.id)} style={{ padding: "14px 10px", borderRadius: 14, background: expanded === cat.id ? st.bg : "#fff", border: `1.5px solid ${expanded === cat.id ? st.border : "#e5e7eb"}`, cursor: "pointer", textAlign: "center" }}>
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{cat.icon}</div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", lineHeight: 1.3 }}>{cat.label}</div>
-                <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, background: st.bg, color: st.color, fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>
-                  {st.icon} {cat.status === "ok" ? "OK" : cat.status === "warning" ? "Reserves" : "Critique"}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* DETAILS */}
-        <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>Detail par categorie</div>
-          {categories.map(cat => {
-            const st = CAT_STATUS[cat.status];
-            const isOpen = expanded === cat.id;
-            return (
-              <div key={cat.id} style={{ border: `1.5px solid ${isOpen ? st.border : "#e5e7eb"}`, borderRadius: 14, overflow: "hidden", background: "#fff" }}>
-                <button onClick={() => setExpanded(isOpen ? null : cat.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                  <span style={{ fontSize: 24 }}>{cat.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, color: "#111827", fontWeight: 700 }}>{cat.label}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{cat.points.length} points inspectes</div>
-                  </div>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: st.bg, border: `1.5px solid ${st.border}`, display: "flex", alignItems: "center", justifyContent: "center", color: st.color, fontWeight: 800 }}>{st.icon}</div>
-                  <span style={{ color: "#9ca3af", fontSize: 18, display: "inline-block", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
-                </button>
-                {isOpen && cat.points.length > 0 && (
-                  <div style={{ borderTop: "1px solid #f3f4f6", padding: "0 20px 16px" }}>
-                    {cat.points.map((p, i) => {
-                      const s = POINT_STATUS[p.status] || POINT_STATUS.ok;
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderBottom: i < cat.points.length - 1 ? "1px solid #f9fafb" : "none" }}>
-                          <span style={{ width: 20, height: 20, borderRadius: 6, background: s.bg, color: s.color, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                            {p.status === "ok" ? "✓" : p.status === "warning" ? "!" : "✕"}
-                          </span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{p.label}</div>
-                            {p.note && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, fontStyle: "italic" }}>{p.note}</div>}
-                          </div>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: s.color, background: s.bg, padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>{s.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {isOpen && cat.points.length === 0 && (
-                  <div style={{ borderTop: "1px solid #f3f4f6", padding: "14px 20px", fontSize: 13, color: "#9ca3af" }}>Aucun point enregistre pour cette categorie.</div>
-                )}
+      {list.length === 0 && <div style={{ fontSize: 13, color: "#475569" }}>Aucun RDV.</div>}
+      <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden" }}>
+        {list.map((r, i) => {
+          const cfg = RDV_CFG[r.status] || RDV_CFG.pending;
+          return (
+            <div key={r.id} style={{ padding: "12px 14px", borderBottom: i < list.length - 1 ? "1px solid #0a1628" : "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 700 }}>{r.client_name}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{r.vehicle} - {r.wilaya} - {r.formule}</div>
+                <div style={{ fontSize: 10, color: "#475569" }}>{r.date} {r.time} - {fmt(r.price)}</div>
               </div>
-            );
-          })}
-        </div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: cfg.bg + "44", padding: "2px 8px", borderRadius: 20 }}>{cfg.label}</span>
+              <div style={{ display: "flex", gap: 5 }}>
+                {r.status === "pending" && <button onClick={() => update(r.id, "confirmed")} style={{ padding: "4px 9px", background: "#052e16", border: "none", borderRadius: 5, color: "#10b981", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Confirmer</button>}
+                {r.status !== "cancelled" && r.status !== "done" && <button onClick={() => update(r.id, "cancelled")} style={{ padding: "4px 9px", background: "#1e293b", border: "none", borderRadius: 5, color: "#ef4444", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Annuler</button>}
+                {r.status === "confirmed" && <button onClick={() => update(r.id, "done")} style={{ padding: "4px 9px", background: "#1e293b", border: "none", borderRadius: 5, color: "#60a5fa", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Termine</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-        {/* GAGE */}
-        <div className="fade" style={{ background: "#111827", borderRadius: 18, padding: "22px 20px", marginBottom: 16, color: "#fff", display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 70, height: 70, border: "2px solid #e5e7eb", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, background: "#fff" }}>🔲</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "Georgia, serif", fontSize: 17, marginBottom: 4 }}>Gage Thiqa Auto</div>
-            <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>
-              Vehicule inspecte par Thiqa Auto<br />
-              Wilaya : {d.wilaya}
+function Rapports({ rapports, refresh }) {
+  const [filter, setFilter] = useState("all");
+  const list = filter === "all" ? rapports : rapports.filter(r => r.status === filter);
+
+  const markPaid = async (id) => {
+    await supabase.from("rapports").update({ paid: true, paid_at: new Date().toISOString() }).eq("id", id);
+    refresh();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontSize: 20, color: "#f1f5f9", fontWeight: 800 }}>Rapports</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {["all","certified","certified_reserves","non_compliant"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: filter === f ? "#1e40af" : "#1e293b", color: filter === f ? "#fff" : "#64748b", fontSize: 11, fontWeight: 700 }}>
+            {f === "all" ? "Tous" : f === "certified" ? "Certifies" : f === "certified_reserves" ? "Reserves" : "Non conformes"}
+          </button>
+        ))}
+      </div>
+      {list.length === 0 && <div style={{ fontSize: 13, color: "#475569" }}>Aucun rapport.</div>}
+      <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden" }}>
+        {list.map((r, i) => {
+          const cfg = RPT_CFG[r.status] || RPT_CFG.certified;
+          const sc = r.score >= 80 ? "#10b981" : r.score >= 55 ? "#f59e0b" : "#ef4444";
+          return (
+            <div key={r.id} style={{ padding: "11px 14px", borderBottom: i < list.length - 1 ? "1px solid #0a1628" : "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, color: "#cbd5e1", fontWeight: 600 }}>{r.brand} {r.model} {r.year}</div>
+                <div style={{ fontSize: 10, color: "#475569" }}>{r.id} - {r.wilaya}</div>
+              </div>
+              <span style={{ fontSize: 16, fontWeight: 800, color: sc }}>{r.score}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color }}>{cfg.label}</span>
+              {r.paid
+                ? <span style={{ fontSize: 10, fontWeight: 700, color: "#10b981" }}>Paye</span>
+                : <button onClick={() => markPaid(r.id)} style={{ padding: "4px 9px", background: "#1e293b", border: "none", borderRadius: 5, color: "#10b981", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Marquer paye</button>
+              }
+              <a href={"/r/" + r.id} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#60a5fa" }}>Voir</a>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Agents({ agents, refresh }) {
+  const [show, setShow] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", phone: "", wilaya: "" });
+
+  const save = async () => {
+    if (!form.name || !form.wilaya) return alert("Nom et wilaya requis");
+    setSaving(true);
+    const id = "AGT-" + Math.floor(Math.random() * 900 + 100);
+    const avatar = form.name.split(" ").map(w => w[0] || "").join("").toUpperCase().slice(0, 2);
+    const { error } = await supabase.from("agents").insert([{ ...form, id, avatar, status: "active", rating: 5.0 }]);
+    setSaving(false);
+    if (!error) { setShow(false); setForm({ name: "", phone: "", wilaya: "" }); refresh(); }
+    else alert("Erreur: " + error.message);
+  };
+
+  const toggle = async (a) => {
+    await supabase.from("agents").update({ status: a.status === "active" ? "inactive" : "active" }).eq("id", a.id);
+    refresh();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 20, color: "#f1f5f9", fontWeight: 800 }}>Agents</div>
+          <div style={{ fontSize: 11, color: "#475569" }}>{agents.length} agents - {agents.filter(a => a.status === "active").length} actifs</div>
+        </div>
+        <button onClick={() => setShow(!show)} style={{ padding: "8px 16px", background: "#1e40af", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          {show ? "Fermer" : "+ Ajouter agent"}
+        </button>
+      </div>
+
+      {show && (
+        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: "18px" }}>
+          <div style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 700, marginBottom: 14 }}>Nouvel agent</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[["Nom complet", "name", "Karim Bensalem"], ["Telephone", "phone", "+213 6..."], ["Wilaya", "wilaya", "Alger"]].map(([lbl, fld, ph]) => (
+              <div key={fld}>
+                <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
+                <input placeholder={ph} value={form[fld]} onChange={e => setForm(v => ({ ...v, [fld]: e.target.value }))}
+                  style={{ width: "100%", padding: "9px 11px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 7, color: "#f1f5f9", fontSize: 13, outline: "none" }} />
+              </div>
+            ))}
+          </div>
+          <button onClick={save} disabled={saving} style={{ marginTop: 12, padding: "10px 22px", background: saving ? "#334155" : "#1e40af", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            {saving ? "Enregistrement..." : "Ajouter"}
+          </button>
+        </div>
+      )}
+
+      {agents.length === 0 && <div style={{ fontSize: 13, color: "#475569" }}>Aucun agent. Ajoutez-en un ci-dessus.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
+        {agents.map(a => (
+          <div key={a.id} style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: a.status === "active" ? "#1e3a8a" : "#1e293b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: a.status === "active" ? "#93c5fd" : "#475569", fontWeight: 800, flexShrink: 0 }}>
+                {a.avatar || (a.name || "").slice(0, 2).toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 700 }}>{a.name}</div>
+                <div style={{ fontSize: 10, color: "#475569" }}>{a.id} - {a.wilaya}</div>
+                <div style={{ fontSize: 10, color: "#64748b" }}>{a.phone}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+              <span style={{ fontSize: 12, color: a.status === "active" ? "#10b981" : "#6b7280", fontWeight: 700 }}>
+                {a.status === "active" ? "Actif" : "Inactif"}
+              </span>
+              <button onClick={() => toggle(a)} style={{ padding: "4px 10px", background: "#1e293b", border: "none", borderRadius: 6, color: a.status === "active" ? "#ef4444" : "#10b981", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                {a.status === "active" ? "Desactiver" : "Activer"}
+              </button>
             </div>
           </div>
-        </div>
-
-        {/* CONTACT */}
-        <div className="fade" style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 18, padding: "20px", marginBottom: 16 }}>
-          <div style={{ fontFamily: "Georgia, serif", fontSize: 17, color: "#111827", marginBottom: 6 }}>Contacter le vendeur</div>
-          <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 16 }}>Le numero est masque pour proteger la vie privee.</div>
-          {!contactRevealed ? (
-            <button onClick={() => setContactRevealed(true)} style={{ width: "100%", padding: "14px", border: "none", borderRadius: 12, background: "#111827", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-              Afficher le numero
-            </button>
-          ) : (
-            <div style={{ padding: "14px 18px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: "Georgia, serif", fontSize: 18, color: "#15803d" }}>+213 6XX XXX XXX</span>
-              <a href="https://wa.me/213600000000" style={{ padding: "8px 14px", background: "#25d366", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>WhatsApp</a>
-            </div>
-          )}
-        </div>
-
-        {/* FOOTER */}
-        <div className="fade" style={{ fontSize: 11, color: "#9ca3af", textAlign: "center", lineHeight: 1.7, padding: "0 10px" }}>
-          <div style={{ marginBottom: 6, fontWeight: 600, color: "#6b7280" }}>{d.id} · thiqa-auto.dz</div>
-          Thiqa Auto est un avis technique independant. Ne remplace pas un essai routier ni une garantie legale.
-        </div>
+        ))}
       </div>
+    </div>
+  );
+}
+
+function Finances({ rapports, refresh }) {
+  const ca = rapports.filter(r => r.paid).reduce((a, r) => a + (r.price || 0), 0);
+  const unpaid = rapports.filter(r => !r.paid).reduce((a, r) => a + (r.price || 0), 0);
+  const n = rapports.filter(r => r.paid).length;
+
+  const markPaid = async (id) => {
+    await supabase.from("rapports").update({ paid: true, paid_at: new Date().toISOString() }).eq("id", id);
+    refresh();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontSize: 20, color: "#f1f5f9", fontWeight: 800 }}>Finances</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+        <Card label="CA encaisse"  value={fmt(ca)}                          sub="Confirme"    icon="✅" />
+        <Card label="Non encaisse" value={fmt(unpaid)}                       sub="A encaisser" icon="⏳" />
+        <Card label="Ticket moyen" value={fmt(n > 0 ? Math.round(ca / n) : 0)} sub="Par inspection" icon="📊" />
+      </div>
+      <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>Rapports non encaisses</span>
+          <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>{fmt(unpaid)}</span>
+        </div>
+        {rapports.filter(r => !r.paid).length === 0 && <div style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>Tout est encaisse.</div>}
+        {rapports.filter(r => !r.paid).map((r, i, arr) => (
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: i < arr.length - 1 ? "1px solid #0a1628" : "none" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600 }}>{r.brand} {r.model} {r.year}</div>
+              <div style={{ fontSize: 10, color: "#475569" }}>{r.id} - {r.wilaya}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: "#fca5a5", fontWeight: 800 }}>{fmt(r.price)}</div>
+              <button onClick={() => markPaid(r.id)} style={{ marginTop: 3, padding: "3px 9px", background: "#1e293b", border: "none", borderRadius: 5, color: "#10b981", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Marquer paye</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function ThiqaAdmin() {
+  const [active, setActive]   = useState("dashboard");
+  const [agents, setAgents]   = useState([]);
+  const [rdvs, setRdvs]       = useState([]);
+  const [rapports, setRapports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    const [a, r, rp] = await Promise.all([
+      supabase.from("agents").select("*").order("name"),
+      supabase.from("rdvs").select("*").order("created_at", { ascending: false }),
+      supabase.from("rapports").select("*").order("created_at", { ascending: false }),
+    ]);
+    setAgents(a.data || []);
+    setRdvs(r.data || []);
+    setRapports(rp.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#080e1a", display: "flex", alignItems: "center", justifyContent: "center", color: "#60a5fa", fontSize: 16 }}>
+      Chargement...
+    </div>
+  );
+
+  const badge = rdvs.filter(r => r.status === "pending").length;
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: "#080e1a", fontFamily: "system-ui, sans-serif" }}>
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #1e293b; } select option { background: #1f2937; }`}</style>
+      <Sidebar active={active} setActive={setActive} badge={badge} />
+      <main style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+        {active === "dashboard" && <Dashboard rapports={rapports} rdvs={rdvs} agents={agents} />}
+        {active === "rdvs"      && <RDVs rapports={rapports} rdvs={rdvs} agents={agents} refresh={load} />}
+        {active === "rapports"  && <Rapports rapports={rapports} refresh={load} />}
+        {active === "agents"    && <Agents agents={agents} refresh={load} />}
+        {active === "finances"  && <Finances rapports={rapports} refresh={load} />}
+      </main>
     </div>
   );
 }
